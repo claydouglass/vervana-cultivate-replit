@@ -42,4 +42,56 @@
 <script src="{{ url_for('static', filename='js/image_analysis.js') }}"></script>
 <script src="{{ url_for('static', filename='js/chatbot.js') }}"></script>
 <script src="{{ url_for('static', filename='js/yield_prediction.js') }}"></script>
+<script>
+    fetch('/api/dashboard_data')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('currentPhase').textContent = data.current_phase;
+            document.getElementById('vpdBounds').textContent = `Lower: ${data.vpd_bounds[0]} kPa, Upper: ${data.vpd_bounds[1]} kPa`;
+
+            const ctx = document.getElementById('vpdChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.environmental_data.map(d => new Date(d.timestamp).toLocaleString()),
+                    datasets: [{
+                        label: 'VPD (kPa)',
+                        data: data.environmental_data.map(d => d.vpd),
+                        borderColor: 'rgb(75, 192, 192)',
+                        tension: 0.1
+                    }, {
+                        label: 'Lower Bound',
+                        data: data.environmental_data.map(() => data.vpd_bounds[0]),
+                        borderColor: 'rgba(255, 99, 132, 0.5)',
+                        borderDash: [5, 5],
+                        fill: false
+                    }, {
+                        label: 'Upper Bound',
+                        data: data.environmental_data.map(() => data.vpd_bounds[1]),
+                        borderColor: 'rgba(255, 99, 132, 0.5)',
+                        borderDash: [5, 5],
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'VPD (kPa)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Date/Time'
+                            }
+                        }
+                    }
+                }
+            });
+        });
+</script>
 {% endblock %}

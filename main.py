@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify
-from models import db, EnvironmentalData, BatchData, NutrientData
+from flask_migrate import Migrate
+from models import db, EnvironmentalData, BatchData, NutrientData, CultivationSchedule, ProcessingSchedule
 from config import Config
 from utils import (
     analyze_image,
@@ -11,7 +12,19 @@ from utils import (
     compare_batch_performance,
     early_warning_system,
     predict_pest_disease_risk,
-    optimize_nutrient_plan
+    optimize_nutrient_plan,
+    import_recipes,
+    import_cultivation_schedule,
+    import_processing_schedule,
+    schedule_cultivation_tasks,
+    schedule_processing_tasks,
+    get_cultivation_schedule,
+    get_processing_schedule,
+    optimize_environment_and_nutrients,
+    calculate_vpd,
+    get_current_growth_phase,
+    get_vpd_bounds,
+    get_recent_environmental_data
 )
 from datetime import datetime, timedelta
 import os
@@ -20,6 +33,7 @@ import uuid
 app = Flask(__name__)
 app.config.from_object(Config)
 db.init_app(app)
+migrate = Migrate(app, db)
 
 # Ensure UPLOAD_FOLDER is set and the directory exists
 app.config['UPLOAD_FOLDER'] = os.path.join(app.root_path, 'uploads')
@@ -69,11 +83,28 @@ def chatbot():
 def batch_data():
     if request.method == 'POST':
         new_batch = BatchData(
+            batch_number=int(request.form['batch_number']),
             batch_id=request.form['batch_id'],
+            veg_week_1_2_start=datetime.strptime(request.form['veg_week_1_2_start'], '%Y-%m-%d'),
+            veg_week_1_2_end=datetime.strptime(request.form['veg_week_1_2_end'], '%Y-%m-%d'),
+            veg_week_3_start=datetime.strptime(request.form['veg_week_3_start'], '%Y-%m-%d'),
+            veg_week_3_end=datetime.strptime(request.form['veg_week_3_end'], '%Y-%m-%d'),
+            flower_week_1_3_start=datetime.strptime(request.form['flower_week_1_3_start'], '%Y-%m-%d'),
+            flower_week_1_3_end=datetime.strptime(request.form['flower_week_1_3_end'], '%Y-%m-%d'),
+            flower_week_4_6_5_start=datetime.strptime(request.form['flower_week_4_6_5_start'], '%Y-%m-%d'),
+            flower_week_4_6_5_end=datetime.strptime(request.form['flower_week_4_6_5_end'], '%Y-%m-%d'),
+            flower_week_6_5_8_5_start=datetime.strptime(request.form['flower_week_6_5_8_5_start'], '%Y-%m-%d'),
+            flower_week_6_5_8_5_end=datetime.strptime(request.form['flower_week_6_5_8_5_end'], '%Y-%m-%d'),
+            flower_week_8_5_plus_start=datetime.strptime(request.form.get('flower_week_8_5_plus_start', ''), '%Y-%m-%d') if request.form.get('flower_week_8_5_plus_start') else None,
+            flower_week_8_5_plus_end=datetime.strptime(request.form.get('flower_week_8_5_plus_end', ''), '%Y-%m-%d') if request.form.get('flower_week_8_5_plus_end') else None,
             harvest_date=datetime.strptime(request.form['harvest_date'], '%Y-%m-%d'),
+            drying_start=datetime.strptime(request.form['drying_start'], '%Y-%m-%d'),
+            drying_end=datetime.strptime(request.form['drying_end'], '%Y-%m-%d'),
+            curing_start=datetime.strptime(request.form['curing_start'], '%Y-%m-%d'),
+            curing_end=datetime.strptime(request.form['curing_end'], '%Y-%m-%d'),
+            yield_amount=float(request.form['yield_amount']),
             thc_level=float(request.form['thc_level']),
-            terpene_profile=request.form['terpene_profile'],
-            yield_amount=float(request.form['yield_amount'])
+            terpene_profile=request.form['terpene_profile']
         )
         db.session.add(new_batch)
         db.session.commit()
@@ -121,6 +152,48 @@ def get_pest_disease_risk():
 def get_nutrient_optimization(batch_id):
     optimization_plan = optimize_nutrient_plan(batch_id)
     return jsonify({'optimization_plan': optimization_plan})
+
+@app.route('/recommendations')
+def recommendations():
+    with app.app_context():
+        return jsonify({"recommendations": get_adjustment_recommendations()})
+
+@app.route('/api/schedule_cultivation/<batch_id>/<int:day>', methods=['POST'])
+def schedule_cultivation(batch_id, day):
+    result = schedule_cultivation_tasks(batch_id, day)
+    return jsonify({'result': result})
+
+@app.route('/api/schedule_processing/<batch_id>/<int:day>', methods=['POST'])
+def schedule_processing(batch_id, day):
+    result = schedule_processing_tasks(batch_id, day)
+    return jsonify({'result': result})
+
+@app.route('/api/cultivation_schedule/<batch_id>/<int:day>', methods=['GET'])
+def get_cultivation_schedule_api(batch_id, day):
+    schedule = get_cultivation_schedule(batch_id, day)
+    return jsonify({'schedule': schedule})
+
+@app.route('/api/processing_schedule/<batch_id>/<int:day>', methods=['GET'])
+def get_processing_schedule_api(batch_id, day):
+    schedule = get_processing_schedule(batch_id, day)
+    return jsonify({'schedule': schedule})
+
+@app.route('/api/optimize_environment_and_nutrients/<batch_id>', methods=['GET'])
+def optimize_environment_and_nutrients_api(batch_id):
+    optimization = optimize_environment_and_nutrients(batch_id)
+    return jsonify(optimization)
+
+@app.route('/api/dashboard_data')
+def dashboard_data():
+    current_phase = get_current_growth_phase()
+    vpd_bounds = get_vpd_bounds(current_phase)
+    env_data = get_recent_environmental_data()
+    
+    return jsonify({
+        'current_phase': current_phase,
+        'vpd_bounds': vpd_bounds,
+        'environmental_data': env_data
+    })
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif'}
