@@ -16,7 +16,7 @@ from utils import (
     get_cultivation_schedule,  # Add this import
     get_processing_schedule  # Add this import
 )
-from models import db, EnvironmentalData, BatchData, NutrientData, PlantMaintenanceTask, CultivationSchedule, ProcessingSchedule  # Add CultivationSchedule and ProcessingSchedule
+from models import db, EnvironmentalData, BatchData, NutrientData, CultivationSchedule, ProcessingSchedule  # Add CultivationSchedule and ProcessingSchedule
 from main import app
 from datetime import datetime, timedelta
 
@@ -93,14 +93,18 @@ def test_functions():
                 temperature=25 + i * 0.1,
                 humidity=50 + i * 0.2,
                 co2_level=1000 + i * 5,
-                light_intensity=500 + i * 2
+                vpd=1.0 + i * 0.05,
+                light_duration=16 if i % 2 == 0 else 8,
+                is_day=i % 2 == 0
             )
             env_data2 = EnvironmentalData(
                 timestamp=batch2.veg_week_1_2_start + timedelta(days=i),
                 temperature=24 + i * 0.1,
                 humidity=52 + i * 0.2,
                 co2_level=980 + i * 5,
-                light_intensity=520 + i * 2
+                vpd=0.9 + i * 0.05,
+                light_duration=16 if i % 2 == 0 else 8,
+                is_day=i % 2 == 0
             )
             nutrient_data1 = NutrientData(
                 timestamp=batch.veg_week_1_2_start + timedelta(days=i),
@@ -155,6 +159,37 @@ def test_functions():
         print("\nTesting get_processing_schedule:")
         processing_schedule = get_processing_schedule("TEST001", 1)  # Get schedule for day 1
         print(processing_schedule)
+
+def test_detect_new_batch_start():
+    with app.app_context():
+        # Create test data
+        room_id = "TEST_ROOM"
+        for i in range(48):
+            env_data = EnvironmentalData(
+                timestamp=datetime.now() - timedelta(hours=48-i),
+                room_id=room_id,
+                light_duration=18 if i < 24 else 15,  # Transition at 24 hours ago
+                temperature=25,
+                humidity=50,
+                co2_level=1000,
+                light_intensity=500,
+                vpd=1.0,
+                is_day=True
+            )
+            db.session.add(env_data)
+        db.session.commit()
+
+        # Test the function
+        new_batch_start = detect_new_batch_start(room_id)
+        assert new_batch_start is not None, "Failed to detect new batch start"
+        print(f"New batch start detected at: {new_batch_start}")
+
+        # Clean up test data
+        EnvironmentalData.query.filter_by(room_id=room_id).delete()
+        db.session.commit()
+
+# Add this to your test_functions()
+test_detect_new_batch_start()
 
 if __name__ == "__main__":
     test_functions()

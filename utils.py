@@ -36,27 +36,33 @@ def fetch_csv_data(url):
     response.raise_for_status()  # Raise an exception for HTTP errors
     return pd.read_csv(StringIO(response.text))
 
+# Add this constant at the top of the file
+ENVIRONMENTAL_DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS-OvMFLTAzu2aSDIEF1ma2YADXDYN-ZjjPfMBB-PMvpbisTVVADFDnyJrLGYn-YJtYei8vQLu0-U9Z/pub?gid=149803876&single=true&output=csv"
+
+# Update the fetch_and_store_historical_data function
 def fetch_and_store_historical_data(start_date, end_date):
-    """
-    Fetch historical data from the provided Google Sheets CSV and store it in the database.
-    """
-    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQYc-8t0iK-e-DoqklYkVA73rSC6JfWqHUrexGR2WVRZXWxyrOPoRw4Ggyw77ajAG6UhfhgZyfQjjbE/pub?output=csv"
-    df = fetch_csv_data(url)
+    df = fetch_csv_data(ENVIRONMENTAL_DATA_URL)
     
-    # Convert timestamp to datetime
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
-    
-    # Filter data within the specified date range
-    mask = (df['timestamp'] >= start_date) & (df['timestamp'] <= end_date)
+    # Convert ct_tm to datetime
+    df['ct_tm'] = pd.to_datetime(df['ct_tm'], format='%m/%d/%y %H:%M')
+    mask = (df['ct_tm'] >= start_date) & (df['ct_tm'] <= end_date)
     df_filtered = df.loc[mask]
+    
+    # Calculate light duration
+    df_filtered['light_duration'] = df_filtered['light_status'].rolling(window=24, min_periods=1).sum()
+    
+    # Convert temperature from Fahrenheit to Celsius
+    df_filtered['tp'] = (df_filtered['tp'] - 32) * 5/9
     
     for _, row in df_filtered.iterrows():
         env_data = EnvironmentalData(
-            timestamp=row['timestamp'],
-            temperature=row['tp'],
+            timestamp=row['ct_tm'],
+            temperature=row['tp'],  # Now in Celsius
             humidity=row['hy'],
             co2_level=row['co2'],
-            light_intensity=row['lp']  # Assuming 'lp' is light intensity
+            vpd=row['vpd'],
+            light_duration=row['light_duration'],
+            is_day=row['light_status'] == 1
         )
         db.session.add(env_data)
     
@@ -70,7 +76,6 @@ def import_recipes():
     url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQSHZY7IWvVORybjlct01p2jWvaqYRQ6Nva5BEqFThwHFC7tPY6E18gLQ985Wmz9hvn1oz2K15lLePE/pub?output=csv"
     df = fetch_csv_data(url)
     
-    # Process the recipes
     recipes = []
     for _, row in df.iterrows():
         recipe = {
@@ -92,6 +97,53 @@ def import_recipes():
         recipes.append(recipe)
     
     return recipes
+
+def import_environmental_recipes():
+    """
+    Import environmental recipes from the provided Google Sheets CSV.
+    """
+    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS-OvMFLTAzu2aSDIEF1ma2YADXDYN-ZjjPfMBB-PMvpbisTVVADFDnyJrLGYn-YJtYei8vQLu0-U9Z/pub?gid=149803876&single=true&output=csv"
+    df = fetch_csv_data(url)
+    
+    recipes = []
+    for _, row in df.iterrows():
+        recipe = {
+            'stage': row['stage'],
+            'temp_day_avg': row['temp(c)_day_avg'],
+            'temp_day_high': row['temp(c)_day_high'],
+            'temp_day_low': row['temp(c)_day_low'],
+            'temp_night_avg': row['temp(c)_night_avg'],
+            'temp_night_high': row['temp(c)_night_high'],
+            'temp_night_low': row['temp(c)_night_low'],
+            'humid_day_avg': row['humid(%rh)_day_avg'],
+            'humid_day_high': row['humid(%rh)_day_high'],
+            'humid_day_low': row['humid(%rh)_day_low'],
+            'humid_night_avg': row['humid(%rh)_night_avg'],
+            'humid_night_high': row['humid(%rh)_night_high'],
+            'humid_night_low': row['humid(%rh)_night_low'],
+            'co2_day_avg': row['co2(ppm)_day_avg'],
+            'co2_day_high': row['co2(ppm)_day_high'],
+            'co2_day_low': row['co2(ppm)_day_low'],
+            'co2_night_high': row['co2(ppm)_night_high'],
+            'co2_night_low': row['co2(ppm)_night_low'],
+            'vpd_high': row['vpd_high'],
+            'vpd_low': row['vpd_low'],
+            'light_duration': row['light_duration'],
+            'light_ppfd': row['light_ppfd']
+        }
+        recipes.append(recipe)
+    
+    return recipes
+
+def get_vpd_bounds(growth_phase):
+    """Get VPD bounds based on the current growth phase from environmental recipes."""
+    recipes = import_environmental_recipes()
+    recipe = next((r for r in recipes if r['stage'] == growth_phase), None)
+    if recipe:
+        return float(recipe['vpd_low']), float(recipe['vpd_high'])
+    else:
+        # Return a default range if the growth phase is not found
+        return 0.8, 1.2
 
 def import_cultivation_schedule():
     url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSugT9wd7xG_wyn3tbFE2MSOiNCAj_HhmvEIWrIhBEjSXzCwF-1LOrzLzvW6NLZyL8PjVC-8O5uCzGi/pub?output=csv"
@@ -159,34 +211,23 @@ def get_chatbot_response(user_input):
     return response.choices[0].message.content
 
 def predict_yield(batch_id):
-    # Existing code...
-    
-    # Add more advanced features
     def calculate_growing_degree_days(temp_data):
-        base_temp = 10  # Adjust based on the specific crop
+        base_temp = 10  # This is now in Celsius (equivalent to about 50°F)
         return sum(max(0, (temp - base_temp)) for temp in temp_data)
 
-    def calculate_vapor_pressure_deficit(temp_data, humidity_data):
-        return [calculate_vpd(temp, humidity) for temp, humidity in zip(temp_data, humidity_data)]
-
-    # Fetch all batch data
     batches = BatchData.query.all()
     
-    # Prepare data for training
     X = []
     y = []
     for batch in batches:
-        # Extract features from terpene profile
         terpenes = batch.terpene_profile.split(',')
         terpene_values = [float(t.split(':')[1]) for t in terpenes]
         
-        # Get environmental data for the batch
         env_data = EnvironmentalData.query.filter(
             EnvironmentalData.timestamp >= batch.harvest_date - timedelta(days=90),
             EnvironmentalData.timestamp <= batch.harvest_date
         ).all()
         
-        # Get nutrient data for the batch
         nutrient_data = NutrientData.query.filter(
             NutrientData.timestamp >= batch.harvest_date - timedelta(days=90),
             NutrientData.timestamp <= batch.harvest_date
@@ -196,25 +237,21 @@ def predict_yield(batch_id):
             temp_data = [d.temperature for d in env_data]
             humidity_data = [d.humidity for d in env_data]
             co2_data = [d.co2_level for d in env_data]
-            light_data = [d.light_intensity for d in env_data]
             
             avg_temp = np.mean(temp_data)
             avg_humidity = np.mean(humidity_data)
             avg_co2 = np.mean(co2_data)
-            avg_light_intensity = np.mean(light_data)
             
             avg_n = np.mean([d.nitrogen_level for d in nutrient_data])
             avg_p = np.mean([d.phosphorus_level for d in nutrient_data])
             avg_k = np.mean([d.potassium_level for d in nutrient_data])
             
-            # Calculate additional features
             growing_degree_days = calculate_growing_degree_days(temp_data)
             vpd = np.mean(calculate_vapor_pressure_deficit(temp_data, humidity_data))
             dli = calculate_dli(avg_light_intensity)
             
-            # Combine all features
             features = [batch.thc_level] + terpene_values + [
-                avg_temp, avg_humidity, avg_co2, avg_light_intensity,
+                avg_temp, avg_humidity, avg_co2,
                 avg_n, avg_p, avg_k, growing_degree_days, vpd, dli,
                 np.std(temp_data), np.std(humidity_data), np.std(co2_data),
                 max(temp_data) - min(temp_data),  # Temperature range
@@ -227,40 +264,33 @@ def predict_yield(batch_id):
     if not X or not y:
         return "Insufficient data for yield prediction"
     
-    # Normalize the features
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
     
-    # Split data for training and testing
     X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
     
-    # Train a Random Forest model
     model = RandomForestRegressor(n_estimators=100, random_state=42)
     model.fit(X_train, y_train)
     
-    # Evaluate the model
     y_pred = model.predict(X_test)
     mse = mean_squared_error(y_test, y_pred)
     r2 = r2_score(y_test, y_pred)
     
-    # Save the model and scaler
     joblib.dump(model, 'yield_prediction_model.joblib')
     joblib.dump(scaler, 'yield_prediction_scaler.joblib')
     
-    # Predict yield for the given batch_id
     target_batch = BatchData.query.filter_by(batch_id=batch_id).first()
     if not target_batch:
         return "Batch not found"
     
-    # Get environmental and nutrient data for the target batch
     target_env_data = EnvironmentalData.query.filter(
         EnvironmentalData.timestamp >= target_batch.harvest_date - timedelta(days=90),
         EnvironmentalData.timestamp <= target_batch.harvest_date
     ).all()
     
     target_nutrient_data = NutrientData.query.filter(
-        NutrientData.timestamp >= target_batch.harvest_date - timedelta(days=90),
-        NutrientData.timestamp <= target_batch.harvest_date
+        EnvironmentalData.timestamp >= target_batch.harvest_date - timedelta(days=90),
+        EnvironmentalData.timestamp <= target_batch.harvest_date
     ).all()
     
     if not target_env_data or not target_nutrient_data:
@@ -269,12 +299,10 @@ def predict_yield(batch_id):
     temp_data = [d.temperature for d in target_env_data]
     humidity_data = [d.humidity for d in target_env_data]
     co2_data = [d.co2_level for d in target_env_data]
-    light_data = [d.light_intensity for d in target_env_data]
     
     avg_temp = np.mean(temp_data)
     avg_humidity = np.mean(humidity_data)
     avg_co2 = np.mean(co2_data)
-    avg_light_intensity = np.mean(light_data)
     
     avg_n = np.mean([d.nitrogen_level for d in target_nutrient_data])
     avg_p = np.mean([d.phosphorus_level for d in target_nutrient_data])
@@ -286,14 +314,13 @@ def predict_yield(batch_id):
     
     target_features = [target_batch.thc_level] + \
                       [float(t.split(':')[1]) for t in target_batch.terpene_profile.split(',')] + \
-                      [avg_temp, avg_humidity, avg_co2, avg_light_intensity,
+                      [avg_temp, avg_humidity, avg_co2,
                        avg_n, avg_p, avg_k, growing_degree_days, vpd, dli,
                        np.std(temp_data), np.std(humidity_data), np.std(co2_data),
                        max(temp_data) - min(temp_data),
                        max(humidity_data) - min(humidity_data),
                        max(co2_data) - min(co2_data)]
     
-    # Scale the target features
     target_features_scaled = scaler.transform([target_features])
     
     predicted_yield = model.predict(target_features_scaled)[0]
@@ -310,20 +337,24 @@ def predict_yield(batch_id):
     }
 
 def analyze_plant_health_trends():
-    # Existing code...
-    
-    # Add more advanced analysis
     def calculate_stress_index(temp_trend, humidity_trend, co2_trend):
-        temp_stress = sum(1 for t in temp_trend if t < 15 or t > 30)
+        temp_stress = sum(1 for t in temp_trend if t < 10 or t > 30)  # Adjusted for Celsius
         humidity_stress = sum(1 for h in humidity_trend if h < 30 or h > 70)
         co2_stress = sum(1 for c in co2_trend if c < 800 or c > 1500)
         return (temp_stress + humidity_stress + co2_stress) / len(temp_trend)
 
-    # Existing code for fetching data and calculating trends...
-
+    recent_env_data = EnvironmentalData.query.order_by(EnvironmentalData.timestamp.desc()).limit(168).all()
+    
+    if not recent_env_data:
+        return "Insufficient data for plant health analysis"
+    
+    temp_trend = [d.temperature for d in recent_env_data]
+    humidity_trend = [d.humidity for d in recent_env_data]
+    co2_trend = [d.co2_level for d in recent_env_data]
+    
     stress_index = calculate_stress_index(temp_trend, humidity_trend, co2_trend)
     
-    analysis += f"\nPlant Stress Index: {stress_index:.2f}\n"
+    analysis = f"Plant Stress Index: {stress_index:.2f}\n"
     if stress_index > 0.3:
         analysis += "Warning: Plants are experiencing significant stress. Immediate action recommended.\n"
     elif stress_index > 0.1:
@@ -331,7 +362,6 @@ def analyze_plant_health_trends():
     else:
         analysis += "Good: Plants are experiencing low stress levels.\n"
 
-    # Add spectral analysis for cyclical patterns
     from scipy.fft import fft
 
     def detect_cyclical_patterns(data):
@@ -350,21 +380,16 @@ def analyze_plant_health_trends():
 
     return analysis
 
-def calculate_plant_health_score(temp, humidity, co2, light, n, p, k):
-    # Existing code...
-    
-    # Add more sophisticated scoring
+def calculate_plant_health_score(temp, humidity, co2, n, p, k):
     def calculate_interaction_score(params):
-        # Consider interactions between parameters
         vpd_score = 100 - abs(calculate_vpd(temp, humidity) - 1.0) * 20  # Optimal VPD around 1.0 kPa
         nutrient_balance_score = 100 - (abs(n/p - 10) + abs(n/k - 1)) * 5  # Ideal N:P:K ratio
         return (vpd_score + nutrient_balance_score) / 2
 
     interaction_score = calculate_interaction_score({'temp': temp, 'humidity': humidity, 'n': n, 'p': p, 'k': k})
     
-    # Calculate weighted average (you can adjust weights based on importance)
     total_score = (temp_score * 1.5 + humidity_score * 1.5 + co2_score * 1.2 + 
-                   light_score * 1.2 + n_score + p_score + k_score + interaction_score * 2) / 10.4
+                   n_score + p_score + k_score + interaction_score * 2) / 10.4
     
     return round(total_score, 2)
 
@@ -382,8 +407,7 @@ def predict_pest_disease_risk():
     temp_variance = np.var(temp_data)
     humidity_variance = np.var(humidity_data)
     
-    # Simple risk model (can be expanded with more sophisticated machine learning models)
-    fungal_risk = (avg_humidity > 70) * 0.6 + (avg_temp > 20 and avg_temp < 30) * 0.4
+    fungal_risk = (avg_humidity > 70) * 0.6 + (avg_temp > 10 and avg_temp < 30) * 0.4
     insect_risk = (avg_temp > 25) * 0.5 + (humidity_variance > 100) * 0.3 + (temp_variance > 25) * 0.2
     
     risk_assessment = "Pest and Disease Risk Assessment:\n"
@@ -398,17 +422,12 @@ def predict_pest_disease_risk():
     return risk_assessment
 
 def optimize_nutrient_plan(batch_id):
-    """
-    Optimize the nutrient plan based on the current batch data and imported recipes.
-    """
     batch = BatchData.query.filter_by(batch_id=batch_id).first()
     if not batch:
         return "Batch not found"
     
     recipes = import_recipes()
     
-    # Determine the current growth stage based on the most recently completed stage or ongoing stage
-    current_date = datetime.now()
     stages = [
         ("Veg Week 1-2", batch.veg_week_1_2_start, batch.veg_week_1_2_end),
         ("Veg Week 3", batch.veg_week_3_start, batch.veg_week_3_end),
@@ -420,30 +439,27 @@ def optimize_nutrient_plan(batch_id):
     
     current_stage = None
     for stage, start, end in reversed(stages):
-        if start and start <= current_date:
-            if not end or end >= current_date:
+        if start and start <= datetime.now():
+            if not end or end >= datetime.now():
                 current_stage = stage
                 break
-            elif end < current_date:
+            elif end < datetime.now():
                 current_stage = stage
                 break
     
     if not current_stage:
         return "Unable to determine current growth stage"
     
-    # Find the recipe for the current stage
     current_recipe = next((r for r in recipes if r['stage'] == current_stage), None)
     
     if not current_recipe:
         return f"No recipe found for stage: {current_stage}"
     
-    # Get the latest nutrient data
     latest_nutrient = NutrientData.query.order_by(NutrientData.timestamp.desc()).first()
     
     if not latest_nutrient:
         return "No nutrient data available"
     
-    # Compare current levels with recipe and generate recommendations
     recommendations = []
     for nutrient, target in [('nitrogen', 'N'), ('phosphorus', 'P'), ('potassium', 'K')]:
         current_level = getattr(latest_nutrient, f"{nutrient}_level")
@@ -454,7 +470,6 @@ def optimize_nutrient_plan(batch_id):
         elif current_level > target_level * 1.1:
             recommendations.append(f"Decrease {nutrient} to reach {target_level} ppm")
     
-    # Add pH and EC recommendations
     latest_env = EnvironmentalData.query.order_by(EnvironmentalData.timestamp.desc()).first()
     if latest_env:
         if latest_env.ph < float(current_recipe['pH_min']):
@@ -473,11 +488,6 @@ def optimize_nutrient_plan(batch_id):
     return "\n".join(recommendations)
 
 def get_adjustment_recommendations():
-    """
-    Analyze recent environmental and nutrient data to provide recommendations
-    for adjustments to optimize plant growth and health.
-    """
-    # Fetch recent environmental and nutrient data
     recent_data = db.session.query(EnvironmentalData, NutrientData).filter(
         EnvironmentalData.timestamp == NutrientData.timestamp
     ).order_by(EnvironmentalData.timestamp.desc()).limit(24).all()  # Last 24 hours of data
@@ -485,12 +495,10 @@ def get_adjustment_recommendations():
     if not recent_data:
         return "Insufficient data for recommendations"
 
-    # Analyze the data and generate recommendations
     recommendations = []
 
-    # Example analysis (you would expand this based on your specific requirements)
     avg_temp = sum(data.EnvironmentalData.temperature for data in recent_data) / len(recent_data)
-    if avg_temp < 20:
+    if avg_temp < 10:
         recommendations.append("Consider increasing temperature")
     elif avg_temp > 30:
         recommendations.append("Consider decreasing temperature")
@@ -507,12 +515,35 @@ def get_adjustment_recommendations():
     elif avg_nitrogen > 200:
         recommendations.append("Consider decreasing nitrogen levels")
 
-    # Add more analyses and recommendations as needed
-
     if not recommendations:
         return "No adjustments recommended at this time"
     
     return "\n".join(recommendations)
+
+def get_current_growth_phase(batch_id):
+       """Determine the current growth phase based on the batch data."""
+       batch = BatchData.query.filter_by(batch_id=batch_id).first()
+       if not batch:
+           return "Batch not found"
+
+       current_date = datetime.now()
+       
+       if batch.veg_week_1_2_start and current_date < batch.veg_week_1_2_end:
+           return "Veg Week 1-2"
+       elif batch.veg_week_3_start and current_date < batch.veg_week_3_end:
+           return "Veg Week 3"
+       elif batch.flower_week_1_3_start and current_date < batch.flower_week_1_3_end:
+           return "Flower Week 1-3"
+       elif batch.flower_week_4_6_5_start and current_date < batch.flower_week_4_6_5_end:
+           return "Flower Week 4-6.5"
+       elif batch.flower_week_6_5_8_5_start and current_date < batch.flower_week_6_5_8_5_end:
+           return "Flower Week 6.5-8.5"
+       elif batch.flower_week_8_5_plus_start and batch.flower_week_8_5_plus_end and current_date < batch.flower_week_8_5_plus_end:
+           return "Flower Week 8.5+ Harvest"
+       elif batch.harvest_date and current_date >= batch.harvest_date:
+           return "Post-Harvest"
+       else:
+           return "Unable to determine current growth stage"
 
 def compare_batch_performance(batch_id1, batch_id2):
     batch1 = BatchData.query.filter_by(batch_id=batch_id1).first()
@@ -521,7 +552,6 @@ def compare_batch_performance(batch_id1, batch_id2):
     if not batch1 or not batch2:
         return "One or both batches not found"
     
-    # Get environmental and nutrient data for both batches
     def get_completed_stages(batch):
         completed_stages = []
         if batch.veg_week_1_2_end:
@@ -541,7 +571,6 @@ def compare_batch_performance(batch_id1, batch_id2):
     completed_stages1 = get_completed_stages(batch1)
     completed_stages2 = get_completed_stages(batch2)
     
-    # Compare only stages that are complete in both batches
     common_stages = [stage for stage in completed_stages1 if stage[0] in [s[0] for s in completed_stages2]]
     
     comparison = []
@@ -575,7 +604,6 @@ def compare_batch_performance(batch_id1, batch_id2):
         }
         comparison.append(stage_comparison)
     
-    # Compare final yield and quality metrics if available
     final_comparison = {}
     if batch1.yield_amount is not None and batch2.yield_amount is not None:
         final_comparison["yield_difference"] = batch1.yield_amount - batch2.yield_amount
@@ -590,8 +618,6 @@ def compare_batch_performance(batch_id1, batch_id2):
     }
 
 def compare_environmental_data(data1, data2):
-    # Implement comparison logic for environmental data
-    # This is a simplified example
     return {
         "avg_temperature_diff": np.mean([d1.temperature for d1 in data1]) - np.mean([d2.temperature for d2 in data2]),
         "avg_humidity_diff": np.mean([d1.humidity for d1 in data1]) - np.mean([d2.humidity for d2 in data2]),
@@ -600,8 +626,6 @@ def compare_environmental_data(data1, data2):
     }
 
 def compare_nutrient_data(data1, data2):
-    # Implement comparison logic for nutrient data
-    # This is a simplified example
     return {
         "avg_nitrogen_diff": np.mean([d1.nitrogen_level for d1 in data1]) - np.mean([d2.nitrogen_level for d2 in data2]),
         "avg_phosphorus_diff": np.mean([d1.phosphorus_level for d1 in data1]) - np.mean([d2.phosphorus_level for d2 in data2]),
@@ -623,10 +647,6 @@ def compare_terpene_profiles(profile1, profile2):
     return differences
 
 def early_warning_system():
-    """
-    Implement an early warning system to detect potential issues in plant growth or environmental conditions.
-    """
-    # Fetch recent environmental and nutrient data
     recent_env_data = EnvironmentalData.query.order_by(EnvironmentalData.timestamp.desc()).limit(168).all()  # Last 7 days
     recent_nutrient_data = NutrientData.query.order_by(NutrientData.timestamp.desc()).limit(168).all()  # Last 7 days
 
@@ -635,7 +655,6 @@ def early_warning_system():
 
     warnings = []
 
-    # Check for rapid changes in environmental conditions
     for i in range(1, len(recent_env_data)):
         temp_change = abs(recent_env_data[i].temperature - recent_env_data[i-1].temperature)
         humidity_change = abs(recent_env_data[i].humidity - recent_env_data[i-1].humidity)
@@ -648,7 +667,6 @@ def early_warning_system():
         if co2_change > 200:
             warnings.append(f"Rapid CO2 level change detected at {recent_env_data[i].timestamp}")
 
-    # Check for nutrient imbalances
     for data in recent_nutrient_data:
         n_p_ratio = data.nitrogen_level / data.phosphorus_level if data.phosphorus_level else 0
         n_k_ratio = data.nitrogen_level / data.potassium_level if data.potassium_level else 0
@@ -658,7 +676,6 @@ def early_warning_system():
         if n_k_ratio > 1.2 or n_k_ratio < 0.8:
             warnings.append(f"N:K ratio out of optimal range at {data.timestamp}")
 
-    # Check for pest and disease risk
     pest_disease_risk = predict_pest_disease_risk()
     if "High" in pest_disease_risk:
         warnings.append("High risk of pest or disease detected")
@@ -757,11 +774,52 @@ def get_processing_schedule(batch_id, current_day):
     return schedule
 
 def optimize_environment_and_nutrients(batch_id):
-    # Combine environment and nutrient optimization logic
-    env_recommendations = get_adjustment_recommendations()
+    current_phase = get_current_growth_phase(batch_id)
+    env_recipes = import_environmental_recipes()
+    current_recipe = next((r for r in env_recipes if r['stage'] == current_phase), None)
+    
+    if not current_recipe:
+        return "Unable to find environmental recipe for current growth phase"
+    
+    latest_env = EnvironmentalData.query.order_by(EnvironmentalData.timestamp.desc()).first()
+    
+    env_recommendations = []
+    if latest_env:
+        is_day = latest_env.is_day
+        
+        # Temperature
+        temp_low = current_recipe['temp_day_low'] if is_day else current_recipe['temp_night_low']
+        temp_high = current_recipe['temp_day_high'] if is_day else current_recipe['temp_night_high']
+        if latest_env.temperature < float(temp_low):
+            env_recommendations.append(f"Increase temperature to at least {temp_low}°C")
+        elif latest_env.temperature > float(temp_high):
+            env_recommendations.append(f"Decrease temperature to at most {temp_high}°C")
+        
+        # Humidity
+        humid_low = current_recipe['humid_day_low'] if is_day else current_recipe['humid_night_low']
+        humid_high = current_recipe['humid_day_high'] if is_day else current_recipe['humid_night_high']
+        if latest_env.humidity < float(humid_low):
+            env_recommendations.append(f"Increase humidity to at least {humid_low}%")
+        elif latest_env.humidity > float(humid_high):
+            env_recommendations.append(f"Decrease humidity to at most {humid_high}%")
+        
+        # CO2
+        co2_low = current_recipe['co2_day_low'] if is_day else current_recipe['co2_night_low']
+        co2_high = current_recipe['co2_day_high'] if is_day else current_recipe['co2_night_high']
+        if latest_env.co2_level < float(co2_low):
+            env_recommendations.append(f"Increase CO2 level to at least {co2_low} ppm")
+        elif latest_env.co2_level > float(co2_high):
+            env_recommendations.append(f"Decrease CO2 level to at most {co2_high} ppm")
+        
+        # VPD
+        if latest_env.vpd < float(current_recipe['vpd_low']):
+            env_recommendations.append(f"Increase VPD to at least {current_recipe['vpd_low']} kPa")
+        elif latest_env.vpd > float(current_recipe['vpd_high']):
+            env_recommendations.append(f"Decrease VPD to at most {current_recipe['vpd_high']} kPa")
+    
     nutrient_recommendations = optimize_nutrient_plan(batch_id)
     
     return {
-        "environmental_recommendations": env_recommendations,
+        "environmental_recommendations": env_recommendations if env_recommendations else "No environmental adjustments needed",
         "nutrient_recommendations": nutrient_recommendations
     }

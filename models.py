@@ -16,13 +16,18 @@ class EnvironmentalData(db.Model):
     temperature: Mapped[float] = mapped_column(Float, nullable=False)
     humidity: Mapped[float] = mapped_column(Float, nullable=False)
     co2_level: Mapped[float] = mapped_column(Float, nullable=False)
-    light_intensity: Mapped[float] = mapped_column(Float, nullable=False)
-    vpd: Mapped[float] = mapped_column(Float, nullable=False)  # Add this line
+    vpd: Mapped[float] = mapped_column(Float, nullable=False)
+    is_day: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    light_duration: Mapped[float] = mapped_column(Float, nullable=False)
+
+    def __repr__(self):
+        return f'<EnvironmentalData {self.timestamp}: {"Day" if self.is_day else "Night"}>'
 
 class BatchData(db.Model):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     batch_number: Mapped[int] = mapped_column(Integer, unique=True, nullable=False)
     batch_id: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    room_id: Mapped[str] = mapped_column(String(50), nullable=False)
     
     # Growth stages (all nullable)
     veg_week_1_2_start: Mapped[Optional[DateTime]] = mapped_column(DateTime, nullable=True)

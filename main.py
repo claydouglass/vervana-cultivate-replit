@@ -21,10 +21,10 @@ from utils import (
     get_cultivation_schedule,
     get_processing_schedule,
     optimize_environment_and_nutrients,
-    calculate_vpd,
     get_current_growth_phase,
     get_vpd_bounds,
-    get_recent_environmental_data
+    get_recent_environmental_data,
+    manual_override_batch_stage
 )
 from datetime import datetime, timedelta
 import os
@@ -51,7 +51,9 @@ def get_environmental_data():
         'temperature': d.temperature,
         'humidity': d.humidity,
         'co2_level': d.co2_level,
-        'light_intensity': d.light_intensity,
+        'vpd': d.vpd,
+        'is_day': d.is_day,
+        'light_duration': d.light_duration,
         'timestamp': d.timestamp.isoformat()
     } for d in data])
 
@@ -194,6 +196,17 @@ def dashboard_data():
         'vpd_bounds': vpd_bounds,
         'environmental_data': env_data
     })
+
+@app.route('/api/manual_override_batch_stage', methods=['POST'])
+def manual_override_batch_stage_api():
+    data = request.json
+    result = manual_override_batch_stage(
+        data['batch_id'],
+        data['stage'],
+        datetime.fromisoformat(data['start_date']),
+        datetime.fromisoformat(data['end_date'])
+    )
+    return jsonify({'result': result})
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif'}
