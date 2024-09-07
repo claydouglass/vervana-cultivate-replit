@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Batch Data</h1>
+<form method="POST">
+    <label for="batch_id">Batch ID:</label>
+    <input type="text" id="batch_id" name="batch_id" required>
+    
+    <label for="harvest_date">Harvest Date:</label>
+    <input type="date" id="harvest_date" name="harvest_date" required>
+    
+    <label for="thc_level">THC Level (%):</label>
+    <input type="number" id="thc_level" name="thc_level" step="0.01" required>
+    
+    <label for="terpene_profile">Terpene Profile:</label>
+    <textarea id="terpene_profile" name="terpene_profile" required></textarea>
+    
+    <button type="submit">Add Batch Data</button>
+</form>
+
+<h2>Existing Batch Data</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Batch ID</th>
+            <th>Harvest Date</th>
+            <th>THC Level</th>
+            <th>Terpene Profile</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for batch in batches %}
+        <tr>
+            <td>{{ batch.batch_id }}</td>
+            <td>{{ batch.harvest_date.strftime('%Y-%m-%d') }}</td>
+            <td>{{ batch.thc_level }}%</td>
+            <td>{{ batch.terpene_profile }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

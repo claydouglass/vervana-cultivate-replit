@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Cultivation Dashboard</h1>
+<div id="environmental-data">
+    <h2>Environmental Data</h2>
+    <p>Temperature: <span id="temperature"></span>°C</p>
+    <p>Humidity: <span id="humidity"></span>%</p>
+    <p>CO2 Level: <span id="co2-level"></span> ppm</p>
+    <p>Last Updated: <span id="last-updated"></span></p>
+</div>
+<div id="chart-container">
+    <canvas id="environmental-chart"></canvas>
+</div>
+<div id="image-analysis">
+    <h2>Plant Image Analysis</h2>
+    <input type="file" id="image-upload" accept="image/*">
+    <div id="analysis-result"></div>
+</div>
+<div id="chatbot">
+    <h2>Cultivation Assistant</h2>
+    <div id="chat-messages"></div>
+    <input type="text" id="user-input" placeholder="Ask a question...">
+    <button id="send-message">Send</button>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/image_analysis.js') }}"></script>
+<script src="{{ url_for('static', filename='js/chatbot.js') }}"></script>
+{% endblock %}
