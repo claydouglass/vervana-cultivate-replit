@@ -14,15 +14,26 @@
 <div id="chart-container">
     <canvas id="environmental-chart"></canvas>
 </div>
+<div id="plant-health-analysis">
+    <h2>Plant Health Analysis</h2>
+    <button id="plant-health-trends">Analyze Plant Health Trends</button>
+    <div id="trends-result"></div>
+</div>
 <div id="image-analysis">
-    <h2>Plant Image Analysis</h2>
+    <h2>Advanced Plant Image Analysis</h2>
     <input type="file" id="image-upload" accept="image/*">
     <div id="analysis-result"></div>
 </div>
+<div id="yield-prediction">
+    <h2>Yield Prediction</h2>
+    <input type="text" id="batch-id" placeholder="Enter Batch ID">
+    <button id="predict-yield">Predict Yield</button>
+    <div id="yield-result"></div>
+</div>
 <div id="chatbot">
-    <h2>Cultivation Assistant</h2>
+    <h2>Advanced Cultivation Assistant</h2>
     <div id="chat-messages"></div>
-    <input type="text" id="user-input" placeholder="Ask a question...">
+    <input type="text" id="user-input" placeholder="Ask a question about plant health or yield...">
     <button id="send-message">Send</button>
 </div>
 {% endblock %}
@@ -30,4 +41,5 @@
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/image_analysis.js') }}"></script>
 <script src="{{ url_for('static', filename='js/chatbot.js') }}"></script>
+<script src="{{ url_for('static', filename='js/yield_prediction.js') }}"></script>
 {% endblock %}

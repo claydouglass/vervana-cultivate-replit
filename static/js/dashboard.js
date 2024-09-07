@@ -14,7 +14,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 updateChart(data);
             })
-            .catch(error => console.error('Error fetching environmental data:', error));
+            .catch(error => {
+                console.error('Error fetching environmental data:', error);
+                document.getElementById('chart-container').innerHTML = '<p>Error loading environmental data. Please try again later.</p>';
+            });
     }
 
     function updateChart(data) {
@@ -48,12 +51,32 @@ document.addEventListener('DOMContentLoaded', function() {
                     x: {
                         type: 'time',
                         time: {
-                            unit: 'day'
+                            unit: 'day',
+                            displayFormats: {
+                                day: 'MMM D'
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Date'
                         }
                     },
                     y: {
-                        beginAtZero: false
+                        beginAtZero: false,
+                        title: {
+                            display: true,
+                            text: 'Value'
+                        }
                     }
+                },
+                plugins: {
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    legend: {
+                        position: 'top',
+                    },
                 }
             }
         });
@@ -76,6 +99,22 @@ document.addEventListener('DOMContentLoaded', function() {
             .catch(error => {
                 console.error('Error fetching adjustment recommendations:', error);
                 adjustmentRecommendations.textContent = 'Error fetching recommendations. Please try again.';
+            });
+    });
+
+    // Add plant health trends analysis
+    const plantHealthTrendsButton = document.getElementById('plant-health-trends');
+    const trendsResult = document.getElementById('trends-result');
+
+    plantHealthTrendsButton.addEventListener('click', function() {
+        fetch('/api/plant_health_trends')
+            .then(response => response.json())
+            .then(data => {
+                trendsResult.innerHTML = `<pre>${data.trends}</pre>`;
+            })
+            .catch(error => {
+                console.error('Error fetching plant health trends:', error);
+                trendsResult.textContent = 'Error fetching plant health trends. Please try again.';
             });
     });
 });

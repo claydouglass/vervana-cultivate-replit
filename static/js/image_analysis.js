@@ -14,7 +14,7 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .then(response => response.json())
             .then(data => {
-                analysisResult.textContent = data.analysis;
+                analysisResult.innerHTML = `<h3>Plant Analysis:</h3><pre>${data.analysis}</pre>`;
             })
             .catch(error => {
                 console.error('Error:', error);
