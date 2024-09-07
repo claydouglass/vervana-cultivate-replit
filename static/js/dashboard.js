@@ -62,4 +62,20 @@ document.addEventListener('DOMContentLoaded', function() {
     // Update data every 5 minutes
     updateEnvironmentalData();
     setInterval(updateEnvironmentalData, 300000);
+
+    // Add event listener for the Adjust Environment button
+    const adjustEnvironmentButton = document.getElementById('adjust-environment');
+    const adjustmentRecommendations = document.getElementById('adjustment-recommendations');
+
+    adjustEnvironmentButton.addEventListener('click', function() {
+        fetch('/api/adjust_environment')
+            .then(response => response.json())
+            .then(data => {
+                adjustmentRecommendations.innerHTML = `<pre>${data.recommendations}</pre>`;
+            })
+            .catch(error => {
+                console.error('Error fetching adjustment recommendations:', error);
+                adjustmentRecommendations.textContent = 'Error fetching recommendations. Please try again.';
+            });
+    });
 });

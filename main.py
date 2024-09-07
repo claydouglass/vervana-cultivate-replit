@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, jsonify
 from models import db, EnvironmentalData, BatchData
 from config import Config
-from utils import analyze_image, get_chatbot_response, fetch_and_store_historical_data
+from utils import analyze_image, get_chatbot_response, fetch_and_store_historical_data, get_adjustment_recommendations
 from datetime import datetime, timedelta
 import os
 import uuid
@@ -66,6 +66,11 @@ def batch_data():
         db.session.commit()
     batches = BatchData.query.all()
     return render_template('batch_data.html', batches=batches)
+
+@app.route('/api/adjust_environment', methods=['GET'])
+def adjust_environment():
+    recommendations = get_adjustment_recommendations()
+    return jsonify({'recommendations': recommendations})
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif'}
