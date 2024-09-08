@@ -20,7 +20,15 @@ import math
 # Load environment variables from .env file
 load_dotenv()
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Retrieve the OpenAI API key from environment variables
+api_key = os.getenv("OPENAI_API_KEY")
+
+# Check if the API key is properly loaded
+if not api_key:
+    raise ValueError("OPENAI_API_KEY environment variable is not set.")
+
+# Initialize OpenAI client with the loaded API key
+OpenAI.api_key = api_key  # Correct way to set the key with 'openai' library
 
 def batch_exists(batch_id):
     """
