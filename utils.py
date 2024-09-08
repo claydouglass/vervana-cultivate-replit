@@ -834,3 +834,27 @@ def optimize_environment_and_nutrients(batch_id):
         "environmental_recommendations": env_recommendations if env_recommendations else "No environmental adjustments needed",
         "nutrient_recommendations": nutrient_recommendations
     }
+def manual_override_batch_stage(batch_id, stage, start_date, end_date):
+    batch = BatchData.query.filter_by(batch_id=batch_id).first()
+    if not batch:
+        return "Batch not found"
+    
+    stage_mapping = {
+        "Veg Week 1-2": ("veg_week_1_2_start", "veg_week_1_2_end"),
+        "Veg Week 3": ("veg_week_3_start", "veg_week_3_end"),
+        "Flower Week 1-3": ("flower_week_1_3_start", "flower_week_1_3_end"),
+        "Flower Week 4-6.5": ("flower_week_4_6_5_start", "flower_week_4_6_5_end"),
+        "Flower Week 6.5-8.5": ("flower_week_6_5_8_5_start", "flower_week_6_5_8_5_end"),
+        "Flower Week 8.5+ Harvest": ("flower_week_8_5_plus_start", "flower_week_8_5_plus_end")
+    }
+    
+    if stage not in stage_mapping:
+        return "Invalid stage"
+    
+    start_attr, end_attr = stage_mapping[stage]
+    setattr(batch, start_attr, start_date)
+    setattr(batch, end_attr, end_date)
+    
+    db.session.commit()
+    
+    return f"Successfully updated {stage} for batch {batch_id}"
