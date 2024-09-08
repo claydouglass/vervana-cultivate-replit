@@ -27,8 +27,8 @@ class EnvironmentalData(db.Model):
 class BatchData(db.Model):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     batch_number: Mapped[int] = mapped_column(Integer, unique=True, nullable=False)
-    batch_id: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
-    room_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    batch_id: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)  # Add unique=True here
+    room_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     
     # Growth stages (all nullable)
     veg_week_1_2_start: Mapped[Optional[DateTime]] = mapped_column(DateTime, nullable=True)
