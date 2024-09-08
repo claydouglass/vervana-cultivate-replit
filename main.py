@@ -23,7 +23,7 @@ from utils import (
     optimize_environment_and_nutrients,
     get_current_growth_phase,
     get_vpd_bounds,
-    get_recent_env_data,  # Changed from get_recent_environmental_data
+    get_latest_env,  # Changed from get_recent_environmental_data
     manual_override_batch_stage
 )
 from datetime import datetime, timedelta
@@ -189,20 +189,20 @@ def optimize_environment_and_nutrients_api(batch_id):
 def dashboard_data():
     current_phase = get_current_growth_phase()
     vpd_bounds = get_vpd_bounds(current_phase)
-    env_data = get_recent_env_data()  # Changed from get_recent_environmental_data()
+    latest_env = EnvironmentalData.query.order_by(EnvironmentalData.timestamp.desc()).first()
     
     return jsonify({
         'current_phase': current_phase,
         'vpd_bounds': vpd_bounds,
-        'environmental_data': [{
-            'temperature': d.temperature,
-            'humidity': d.humidity,
-            'co2_level': d.co2_level,
-            'vpd': d.vpd,
-            'light_duration': d.light_duration,
-            'is_day': d.is_day,
-            'timestamp': d.timestamp.isoformat()
-        } for d in env_data]
+        'environmental_data': {
+            'temperature': latest_env.temperature,
+            'humidity': latest_env.humidity,
+            'co2_level': latest_env.co2_level,
+            'vpd': latest_env.vpd,
+            'light_duration': latest_env.light_duration,
+            'is_day': latest_env.is_day,
+            'timestamp': latest_env.timestamp.isoformat()
+        } if latest_env else None
     })
 
 @app.route('/api/manual_override_batch_stage', methods=['POST'])

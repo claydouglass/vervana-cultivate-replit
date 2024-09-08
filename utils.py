@@ -477,7 +477,10 @@ def optimize_nutrient_plan(batch_id):
             recommendations.append(f"Increase {nutrient} to reach {target_level} ppm")
         elif current_level > target_level * 1.1:
             recommendations.append(f"Decrease {nutrient} to reach {target_level} ppm")
-    
+
+def get_latest_env():
+    return EnvironmentalData.query.order_by(EnvironmentalData.timestamp.desc()).first()
+
     latest_env = EnvironmentalData.query.order_by(EnvironmentalData.timestamp.desc()).first()
     if latest_env:
         if latest_env.ph < float(current_recipe['pH_min']):
