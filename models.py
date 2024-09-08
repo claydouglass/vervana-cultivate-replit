@@ -11,14 +11,15 @@ class Base(DeclarativeBase):
 db = SQLAlchemy(model_class=Base)
 
 class EnvironmentalData(db.Model):
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    timestamp: Mapped[DateTime] = mapped_column(DateTime, nullable=False)
-    temperature: Mapped[float] = mapped_column(Float, nullable=False)
-    humidity: Mapped[float] = mapped_column(Float, nullable=False)
-    co2_level: Mapped[float] = mapped_column(Float, nullable=False)
-    vpd: Mapped[float] = mapped_column(Float, nullable=False)
-    is_day: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    light_duration: Mapped[float] = mapped_column(Float, nullable=False)
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime, nullable=False)
+    temperature = db.Column(db.Float, nullable=False)
+    humidity = db.Column(db.Float, nullable=False)
+    co2_level = db.Column(db.Float, nullable=False)
+    vpd = db.Column(db.Float, nullable=False)
+    light_duration = db.Column(db.Float, nullable=False)
+    is_day = db.Column(db.Boolean, nullable=False)
+    # ... any other fields you might have
 
     def __repr__(self):
         return f'<EnvironmentalData {self.timestamp}: {"Day" if self.is_day else "Night"}>'
